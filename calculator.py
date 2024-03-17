@@ -1,5 +1,7 @@
 # to handle application's termination and exit status
 import sys
+# to connect signals with methods that need to take extra args 
+from functools import partial
 
 # import PyQt6 components
 from PyQt6.QtCore import Qt
@@ -14,14 +16,15 @@ from PyQt6.QtWidgets import (
 )
 
 WINDOW_SIZE = 250
-DISPLAY_HEIGHT = 50
-BUTTON_SIZE = 40
+DISPLAY_HEIGHT = 45
+BUTTON_SIZE = 45
+ERROR_MESSAGE = "ERROR. TRY AGAIN."
 
-# if command-line arguments are needed, then can use sys.argv to handle them instead
+# if command-line arguments are needed, then use sys.argv to handle them instead
 args = []
 
 class CalculatorWindow(QMainWindow):
-	"""The main window for the calculator (view)"""
+	"""The main window for the calculator (View)"""
 	def __init__(self):
 		super().__init__()
 		self.setWindowTitle("Calculator")
@@ -39,7 +42,7 @@ class CalculatorWindow(QMainWindow):
 		self.display.setReadOnly(True)
 		self.generalLayout.addWidget(self.display)
 	def _createButtons(self):
-		self.buttonMap = {}
+		self.buttonMap = {}  # initialize a dictionary to hold the calculator buttons
 		buttonsLayout = QGridLayout()
 		keyBoard = [
 			["7", "8", "9", "/", "C"], 
@@ -53,14 +56,58 @@ class CalculatorWindow(QMainWindow):
                 		self.buttonMap[key].setFixedSize(BUTTON_SIZE, BUTTON_SIZE)
                 		buttonsLayout.addWidget(self.buttonMap[key], row, col)
 
-		self.generalLayout.addLayout(buttonsLayout)
+		self.generalLayout.addLayout(buttonsLayout)  # add grid layout into calculator's general layout
+	def setDisplayText(self, text):
+		"""set the current text"""
+		self.display.setText(text)
+		self.display.setFocus()  # set cursor's focus on the display
+	def displayText(self):
+		"""get the current text"""
+		return self.display.text()
+	def clearDisplay(self):
+		"""clear the current text"""
+		self.setDisplayText("") 
+class CalculatorController:
+	"""The calculator's controller for accessing the GUI, creating math expressions, and connecting the button clicks in the calculator"""
+	def __init__(self, model, view):
+		self._evaluate = model
+		self._view = view
+		self._connectSignalsAndSlots()
+	
+	def _calculateResult(self):
+		result = self._evaluate(expression=self._view.displayText())
+		self._view.setDisplayText(result)
 
+	def _buildExpression(self, subExpression):
+		if self._view.displayText() == ERROR_MESSAGE:
+			self._view.clearDisplay()
+		expression = self._view.displayText() + subExpression
+		self._view.setDisplayText(expression)
+
+	def _connectSignalsAndSlots(self):
+		for keySymbol, button in self._view.buttonMap.items():
+			if keySymbol not in {"=", "C"}:
+				button.clicked.connect(
+					partial(self._buildExpression, keySymbol)
+				)
+		self._view.buttonMap["="].clicked.connect(self._calculateResult)
+		self._view.display.returnPressed.connect(self._calculateResult)
+		self._view.buttonMap["C"].clicked.connect(self._view.clearDisplay)
+
+def evaluateExpression(expression):
+	"""Evaluate the result of the input expression (Model)"""
+	try:
+		result = str(eval(expression, {}, {}))
+	except (SyntaxError, NameError, TypeError, ZeroDivisionError):
+		result = ERROR_MESSAGE
+	return result
 
 def main():
 	"""Calculator's main function"""
 	calculatorApp = QApplication(args)  # create instance of QApplication
 	calculatorWindow = CalculatorWindow()  # create window for the calculator
 	calculatorWindow.show()
+	CalculatorController(model=evaluateExpression, view=calculatorWindow)
 	sys.exit(calculatorApp.exec())  # run application event loop
 
 if __name__ == "__main__":
